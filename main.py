@@ -2,6 +2,7 @@ from collections import deque
 
 from input.seed import get_seeds
 from fetcher.page import fetch_page
+from fetcher.robots import is_allowed
 from parser.html import extract_links
 
 def main():
@@ -12,6 +13,10 @@ def main():
         while queue:
             url = queue.popleft()
             if url in visited: continue
+            
+            if not is_allowed(url):
+                print('Skipping', url)
+                continue
 
             print('Fetching', url)
             html = fetch_page(url)
