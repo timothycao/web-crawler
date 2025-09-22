@@ -12,7 +12,13 @@ def is_allowed(url, user_agent='*'):
     
     rp = RobotFileParser()
     rp.set_url(base_url + '/robots.txt')
-    rp.read()
-    cache[base_url] = rp
-
-    return rp.can_fetch(user_agent, url)
+    
+    try:
+        rp.read()
+        cache[base_url] = rp
+        return rp.can_fetch(user_agent, url)
+    
+    except Exception as e:
+        # Print warning, but still allow crawl
+        print(f'[WARNING] Failed to fetch {base_url}/robots.txt: {e}')
+        return True
