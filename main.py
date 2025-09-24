@@ -4,6 +4,7 @@ from input.seed import get_seeds
 from fetcher.page import fetch_page
 from fetcher.robots import is_allowed
 from parser.html import extract_links
+from utils.url import clean_url
 
 def main():
     seeds = get_seeds()
@@ -27,6 +28,7 @@ def main():
 
             links = extract_links(html, url)
             for link in links:
+                link = clean_url(link)
                 if link in visited: continue
                 queue.append(link)
         
