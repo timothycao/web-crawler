@@ -1,8 +1,9 @@
 from urllib.request import urlopen, Request
+from datetime import datetime, timezone
 from io import BytesIO
 import gzip
 
-def fetch_page(url):
+def fetch_page(url, return_meta=False):
     headers = {
         'Accept': 'text/html',
         # Browser headers to avoid blocks
@@ -10,24 +11,38 @@ def fetch_page(url):
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
     }
 
+    meta = {
+        'status_code': 0,
+        'content_length': 0,
+        'timestamp': datetime.now(timezone.utc).isoformat()
+    }
+
     try:
+        # Send request
         request = Request(url, headers=headers)
         response = urlopen(request)
+        meta['status_code'] = response.getcode()
+        meta['timestamp'] = datetime.now(timezone.utc).isoformat()
 
         # Skip non-HTML content (i.e. image, pdf, etc.)
         if 'text/html' not in response.headers.get('Content-Type', ''):
             print('Skipping non-html content')
-            return
+            return None, meta
         
-        # Decompress gzip if needed
+        # Read raw response
+        raw_bytes = response.read()
+        
+        # Decompress if gzipped
         if response.headers.get('Content-Encoding') == 'gzip':
             print('Decompressing gzip content')
-            raw_bytes = response.read()
             buffer = BytesIO(raw_bytes)
-            decompressed = gzip.GzipFile(fileobj=buffer)
-            return decompressed.read().decode('utf-8')
+            raw_bytes = gzip.GzipFile(fileobj=buffer).read() # decompressed
         
-        return response.read().decode('utf-8')
+        # Decode to HTML
+        html = raw_bytes.decode('utf-8')
+        meta['content_length'] = len(raw_bytes)
+        return html, meta
     
     except Exception as e:
         print(f'[ERROR] Failed to fetch {url}: {e}')
+        return None, meta
