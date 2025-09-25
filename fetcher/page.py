@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 import gzip
 
-def fetch_page(url, return_meta=False):
+def fetch_page(url):
     headers = {
         'Accept': 'text/html',
         # Browser headers to avoid blocks
@@ -18,10 +18,12 @@ def fetch_page(url, return_meta=False):
     }
 
     try:
+        print(f'Fetching {url}')
+
         # Send request
         request = Request(url, headers=headers)
         response = urlopen(request)
-        meta['status_code'] = response.getcode()
+        meta['status_code'] = response.getcode() or 0
         meta['timestamp'] = datetime.now(timezone.utc).isoformat()
 
         # Skip non-HTML content (i.e. image, pdf, etc.)
