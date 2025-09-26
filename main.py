@@ -16,10 +16,12 @@ MAX_PAGES = 100
 def main():
     # Crawl state initialization
     seeds = get_seeds()
-    max_heap = [] # Simulated max-heap using -priority
-    visited = set()
-    domain_counts = defaultdict(int)
+    max_heap = []                       # Simulated max-heap using -priority
+    visited = set()                     # URLs that were successfully crawled
+    disallowed = set()                  # URLs disallowed by robots.txt
+    domain_counts = defaultdict(int)    # Track number of pages crawled per domain
     
+    # Seed the priority queue
     for seed in seeds:
         heappush(max_heap, (0, seed, 0)) # (-priority, url, depth)
 
@@ -30,20 +32,23 @@ def main():
     start_time = time()
 
     with open('log.txt', 'w') as log:
-        # BFS crawl loop
+        # Crawl loop using max heap (priority-based BFS)
         while max_heap and total_pages < MAX_PAGES:
             _, url, depth = heappop(max_heap)
-            if url in visited: continue
+
+            # Skip already visited or disallowed URLs
+            if url in visited or url in disallowed: continue
             
             # Check robots.txt permission
             if not is_allowed(url):
+                disallowed.add(url)
                 print('Skipping', url)
                 continue
 
             # Fetch page and record status
             html, meta = fetch_page(url)
             status_counts[meta['status_code']] += 1
-            if not html or meta['status_code'] != 200: continue
+            if meta['status_code'] != 200 or not html: continue
             
             # Update crawl stats
             visited.add(url)
@@ -60,7 +65,7 @@ def main():
             links = extract_links(html, url)
             for link in links:
                 link = clean_url(link)
-                if link in visited: continue
+                if link in visited or link in disallowed: continue
 
                 link_domain = urlparse(link).netloc
                 link_priority = compute_priority(domain_counts[link_domain])
