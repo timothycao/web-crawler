@@ -13,6 +13,7 @@ def log_summary(log_file, num_pages, total_size, total_time, status_counts, doma
     
     log_file.write("\nPages crawled per domain:\n")
     for domain, count in sorted(domain_counts.items(), key=lambda x: -x[1]):
+        if count == 0: continue
         log_file.write(f"{domain}: {count}\n")   
     
     log_file.flush()

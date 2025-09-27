@@ -1,4 +1,5 @@
 from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
 from datetime import datetime, timezone
 from io import BytesIO
 import gzip
@@ -19,32 +20,45 @@ def fetch_page(url):
 
     try:
         print(f'Fetching {url}')
-
-        # Send request
         request = Request(url, headers=headers)
         response = urlopen(request)
-        meta['status_code'] = response.getcode() or 0
-        meta['timestamp'] = datetime.now(timezone.utc).isoformat()
-
-        # Skip non-HTML content (i.e. image, pdf, etc.)
-        if 'text/html' not in response.headers.get('Content-Type', ''):
-            print('Skipping non-html content')
-            return None, meta
-        
-        # Read raw response
-        raw_bytes = response.read()
-        
-        # Decompress if gzipped
-        if response.headers.get('Content-Encoding') == 'gzip':
-            print('Decompressing gzip content')
-            buffer = BytesIO(raw_bytes)
-            raw_bytes = gzip.GzipFile(fileobj=buffer).read() # decompressed
-        
-        # Decode to HTML
-        html = raw_bytes.decode('utf-8')
-        meta['content_length'] = len(raw_bytes)
-        return html, meta
     
+    # Handle HTTP response errors (e.g. 404, 403, 500)
+    except HTTPError as e:
+        meta['status_code'] = e.code
+        meta['timestamp'] = datetime.now(timezone.utc).isoformat()
+        print(f'[ERROR] Failed to fetch {url}: {e}')
+        return None, meta
+
+    # Handle network-level errors (e.g. DNS failure, connection timeout)
+    except URLError as e:
+        print(f'[ERROR] Failed to fetch {url}: {e}')
+        return None, meta
+    
+    # Handle unexpected errors
     except Exception as e:
         print(f'[ERROR] Failed to fetch {url}: {e}')
         return None, meta
+        
+    # Update metadata after successful fetch
+    meta['status_code'] = response.getcode() or 0
+    meta['timestamp'] = datetime.now(timezone.utc).isoformat()
+
+    # Skip non-HTML content (e.g. image, pdf, etc.)
+    if 'text/html' not in response.headers.get('Content-Type', ''):
+        print('Skipping non-html content')
+        return None, meta
+    
+    # Read raw response
+    raw_bytes = response.read()
+    
+    # Decompress if gzipped
+    if response.headers.get('Content-Encoding') == 'gzip':
+        print('Decompressing gzip content')
+        buffer = BytesIO(raw_bytes)
+        raw_bytes = gzip.GzipFile(fileobj=buffer).read() # decompressed
+    
+    # Decode to HTML
+    html = raw_bytes.decode('utf-8')
+    meta['content_length'] = len(raw_bytes)
+    return html, meta

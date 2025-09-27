@@ -18,3 +18,6 @@ def clean_url(url):
         cleaned = cleaned.rstrip('/')
     
     return cleaned
+
+def validate_url(url):
+    return url.startswith('http://') or url.startswith('https://')

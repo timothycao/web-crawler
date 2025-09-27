@@ -7,7 +7,7 @@ from input.seed import get_seeds
 from fetcher.page import fetch_page
 from fetcher.robots import is_allowed
 from parser.html import extract_links
-from utils.url import clean_url
+from utils.url import clean_url, validate_url
 from utils.priority import compute_priority
 from logger.log import log_url, log_summary
 
@@ -52,24 +52,33 @@ def main():
             # Fetch and validate page
             html, meta = fetch_page(url)
             status_counts[meta['status_code']] += 1
-            if meta['status_code'] != 200 or not html: continue
+            
+            # Compute updated priority (based on new domain count)
+            priority = -1
+            if meta['status_code'] == 200 and html:
+                domain = urlparse(url).netloc
+                domain_counts[domain] += 1
+                priority = compute_priority(domain_counts[domain])
+            
+            # Log result
+            log_url(log, url, meta, depth, priority)
 
             # Update crawl stats
             visited.add(url)
             total_pages += 1
             total_bytes += meta['content_length']
 
-            # Compute updated priority (based on new domain count) and log result
-            domain = urlparse(url).netloc
-            domain_counts[domain] += 1
-            priority = compute_priority(domain_counts[domain])
-            log_url(log, url, meta, depth, priority)
+            # Skip link extraction for failed or invalid pages
+            if meta['status_code'] != 200 or not html: continue
 
             # Process and enqueue child links
             links = extract_links(html, url)
             for link in links:
                 # Normalize URL (strip query, fragment, and trailing slash)
                 link = clean_url(link)
+
+                # Skip invalid URLs (not http/https)
+                if not validate_url(link): continue
                 
                 # Skip already visited or disallowed URLs
                 if link in visited or link in disallowed: continue
