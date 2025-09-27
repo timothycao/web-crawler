@@ -21,10 +21,19 @@ def main():
     disallowed = set()                  # URLs disallowed by robots.txt
     domain_counts = defaultdict(int)    # Track number of pages crawled per domain
     
-    # Seed the priority queue
+    # Seed initial crawl queue
     for seed in seeds:
-        heappush(max_heap, (0, seed, 0)) # (-priority, url, depth)
+        # Normalize URL (strip query, fragment, and trailing slash)
+        seed = clean_url(seed)
 
+        # Check robots.txt permission
+        if not is_allowed(seed):
+            disallowed.add(seed)
+            print('Skipping', seed)
+            continue
+        
+        heappush(max_heap, (0, seed, 0)) # (-priority, url, depth)
+    
     # Crawl statistics
     total_pages = 0
     total_bytes = 0
@@ -34,39 +43,44 @@ def main():
     with open('log.txt', 'w') as log:
         # Crawl loop using max heap (priority-based BFS)
         while max_heap and total_pages < MAX_PAGES:
+            # Pop URL with highest priority
             _, url, depth = heappop(max_heap)
 
             # Skip already visited or disallowed URLs
             if url in visited or url in disallowed: continue
-            
-            # Check robots.txt permission
-            if not is_allowed(url):
-                disallowed.add(url)
-                print('Skipping', url)
-                continue
 
-            # Fetch page and record status
+            # Fetch and validate page
             html, meta = fetch_page(url)
             status_counts[meta['status_code']] += 1
             if meta['status_code'] != 200 or not html: continue
-            
+
             # Update crawl stats
             visited.add(url)
             total_pages += 1
             total_bytes += meta['content_length']
 
-            # Compute priority and log result
+            # Compute updated priority (based on new domain count) and log result
             domain = urlparse(url).netloc
             domain_counts[domain] += 1
             priority = compute_priority(domain_counts[domain])
             log_url(log, url, meta, depth, priority)
 
-            # Extract and enqueue child links
+            # Process and enqueue child links
             links = extract_links(html, url)
             for link in links:
+                # Normalize URL (strip query, fragment, and trailing slash)
                 link = clean_url(link)
+                
+                # Skip already visited or disallowed URLs
                 if link in visited or link in disallowed: continue
 
+                # Check robots.txt permission
+                if not is_allowed(link):
+                    disallowed.add(link)
+                    print('Skipping', link)
+                    continue
+
+                # Compute priority and enqueue
                 link_domain = urlparse(link).netloc
                 link_priority = compute_priority(domain_counts[link_domain])
                 heappush(max_heap, (-link_priority, link, depth + 1))
