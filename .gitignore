@@ -7,5 +7,5 @@ __pycache__
 # System files
 .DS_Store
 
-# Log
-log.txt
+# Log files
+log*.txt
