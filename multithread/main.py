@@ -2,12 +2,13 @@ from time import time
 from heapq import heappush, heappop
 from socket import setdefaulttimeout
 
-from input.seed import get_seeds
+from query.ddg import query_ddg
 from fetcher.robots import is_allowed
 from utils.url import clean_url, validate_url
 from logger.log import log_summary
 from multithread.worker import crawl_pages
 
+QUERY = 'dogs and cats'
 MAX_PAGES = 100
 MAX_TIMEOUTS = 2 # Max allowed fetch failures per domain (status 0, no content)
 NUM_THREADS = 16
@@ -17,7 +18,7 @@ setdefaulttimeout(5)
 
 def main():
     # Crawl state initialization
-    seeds = get_seeds()
+    seeds = query_ddg(QUERY, max_results=10)
     max_heap = []           # Simulated max-heap using -priority
     scheduled = set()       # URLs scheduled to be visited (in heap)
     visited = set()         # URLs that were fetched

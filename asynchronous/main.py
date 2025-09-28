@@ -1,20 +1,22 @@
 from asyncio import run, get_event_loop
-from aiohttp import ClientSession
 from heapq import heappush, heappop
 
-from input.seed import get_seeds
+from aiohttp import ClientSession
+
+from query.ddg import query_ddg
 from fetcher.robots import is_allowed
 from utils.url import clean_url, validate_url
 from logger.log import log_summary
 from asynchronous.worker import crawl_pages
 
+QUERY = 'dogs and cats'
 MAX_PAGES = 100
 MAX_TIMEOUTS = 2 # Max allowed fetch failures per domain (status 0, no content)
 MAX_CONCURRENT_REQUESTS = 16
 
 async def main():
     # Crawl state initialization
-    seeds = get_seeds()
+    seeds = query_ddg(QUERY, max_results=10)
     max_heap = []           # Simulated max-heap using -priority
     scheduled = set()       # URLs scheduled to be visited (in heap)
     visited = set()         # URLs that were fetched
