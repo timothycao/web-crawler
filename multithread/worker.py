@@ -12,8 +12,9 @@ def crawl_page(item, state, log):
     priority, url, depth = item
 
     # Skip if already visited (thread-safe early check)
-    if url in state['visited']: return None
-    state['visited'].add(url)
+    with state['visited_lock']:
+        if url in state['visited']: return None
+        state['visited'].add(url)
     
     # Extract domain from URL
     domain = urlsplit(url).netloc
@@ -23,20 +24,24 @@ def crawl_page(item, state, log):
 
     # Count timeout-related failures (status 0 and no content)
     if meta['status_code'] == 0 and meta['content_length'] == 0:
-        state['timeout_counts'][domain] = state['timeout_counts'].get(domain, 0) + 1
+        with state['timeout_counts_lock']:
+            state['timeout_counts'][domain] = state['timeout_counts'].get(domain, 0) + 1
 
     # Log result
     log_url(log, url, meta, depth, -priority)
 
     # Update crawl stats
-    state['total_bytes'] += meta['content_length']
-    state['status_counts'][meta['status_code']] = state['status_counts'].get(meta['status_code'], 0) + 1
+    with state['total_bytes_lock']:
+        state['total_bytes'] += meta['content_length']
+    with state['status_counts_lock']:
+        state['status_counts'][meta['status_code']] = state['status_counts'].get(meta['status_code'], 0) + 1
 
     # Skip link extraction if fetch failed or content missing (or not html)
     if meta['status_code'] != 200 or not html: return None
 
     # Increment successful crawl count per domain
-    state['crawl_counts'][domain] = state['crawl_counts'].get(domain, 0) + 1
+    with state['crawl_counts_lock']:
+        state['crawl_counts'][domain] = state['crawl_counts'].get(domain, 0) + 1
 
     # Extract and enqueue child links
     result = []
@@ -45,27 +50,42 @@ def crawl_page(item, state, log):
         # Normalize URL: strip query, fragment, and trailing slash
         link = clean_url(link)
         link_domain = urlsplit(link).netloc # Extract domain
+        
+        # Skip if already in heap
+        with state['scheduled_lock']:
+            if link in state['scheduled']: continue
 
-        # Skip if already handled or invalid
-        if (
-            link in state['scheduled']      # Already in heap
-            or link in state['visited']     # Already fetched
-            or link in state['disallowed']  # Blocked by robots.txt
-            or not validate_url(link)       # Invalid URL (not http/https)
-            or state['timeout_counts'].get(link_domain, 0) >= state['max_timeouts'] # Domain exceeded failure limit
-        ):
-            continue
+        # Skip if already fetched
+        with state['visited_lock']:
+            if link in state['visited']: continue
+
+        # Skip if already in robots block list
+        with state['disallowed_lock']:
+            if link in state['disallowed']: continue
+
+        # Skip if invalid URL (not http/https)
+        if not validate_url(link): continue
+
+        # Skip if domain already exceeded timeout failure limit
+        with state['timeout_counts_lock']:
+            if state['timeout_counts'].get(link_domain, 0) >= state['max_timeouts']: continue
 
         # Check robots.txt permission
-        if not is_allowed(link, state['robots_cache']):
-            state['disallowed'].add(link)
+        with state['robots_cache_lock']:
+            allowed = is_allowed(link, state['robots_cache'])
+        if not allowed:
+            with state['disallowed_lock']:
+                state['disallowed'].add(link)
             print('Skipping', link)
             continue
 
         # Compute priority and enqueue
-        priority = compute_priority(state['crawl_counts'].get(link_domain, 0))
+        with state['crawl_counts_lock']:
+            domain_count = state['crawl_counts'].get(link_domain, 0)
+        priority = compute_priority(domain_count)
+        with state['scheduled_lock']:
+            state['scheduled'].add(link)
         result.append((-priority, link, depth + 1))
-        state['scheduled'].add(link)
 
     # Return new links
     return result

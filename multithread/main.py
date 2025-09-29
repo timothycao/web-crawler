@@ -1,6 +1,7 @@
 from time import time
 from heapq import heappush, heappop
 from socket import setdefaulttimeout
+from threading import Lock
 
 from query.ddg import query_ddg
 from fetcher.robots import is_allowed
@@ -9,7 +10,7 @@ from logger.log import log_summary
 from multithread.worker import crawl_pages
 
 QUERY = 'dogs and cats'
-MAX_PAGES = 100
+MAX_PAGES = 1000
 MAX_TIMEOUTS = 2 # Max allowed fetch failures per domain (status 0, no content)
 NUM_THREADS = 16
 
@@ -19,12 +20,12 @@ setdefaulttimeout(5)
 def main():
     # Crawl state initialization
     seeds = query_ddg(QUERY, max_results=10)
-    max_heap = []           # Simulated max-heap using -priority
-    scheduled = set()       # URLs scheduled to be visited (in heap)
-    visited = set()         # URLs that were fetched
-    disallowed = set()      # URLs blocked by robots.txt
-    robots_cache = {}       # Stores robot parser per domain
-    timeout_counts = {}     # Count timeout-related fetch failures per domain
+    max_heap = []                                       # Simulated max-heap using -priority
+    scheduled, scheduled_lock = set(), Lock()           # URLs scheduled to be visited (in heap)
+    visited, visited_lock = set(), Lock()               # URLs that were fetched
+    disallowed, disallowed_lock = set(), Lock()         # URLs blocked by robots.txt
+    robots_cache, robots_cache_lock = {}, Lock()        # Stores robot parser per domain
+    timeout_counts, timeout_counts_lock = {}, Lock()    # Count timeout-related fetch failures per domain
     
     # Seed initial crawl queue
     for seed in seeds:
@@ -49,9 +50,9 @@ def main():
         scheduled.add(seed)
     
     # Crawl statistics
-    total_bytes = 0         # Total bytes of fetched pages
-    status_counts = {}      # Count responses per HTTP status code
-    crawl_counts = {}       # Count pages successfully crawled per domain
+    total_bytes, total_bytes_lock = 0, Lock()       # Total bytes of fetched pages
+    status_counts, status_counts_lock = {}, Lock()  # Count responses per HTTP status code
+    crawl_counts, crawl_counts_lock = {}, Lock()    # Count pages successfully crawled per domain
     start_time = time()
 
     with open('log.txt', 'w') as log:
@@ -73,6 +74,16 @@ def main():
                 'crawl_counts': crawl_counts,
                 'total_bytes': total_bytes,
                 'max_timeouts': MAX_TIMEOUTS,
+
+                # locks
+                'scheduled_lock': scheduled_lock,
+                'visited_lock': visited_lock,
+                'disallowed_lock': disallowed_lock,
+                'robots_cache_lock': robots_cache_lock,
+                'timeout_counts_lock': timeout_counts_lock,
+                'status_counts_lock': status_counts_lock,
+                'crawl_counts_lock': crawl_counts_lock,
+                'total_bytes_lock': total_bytes_lock,
             }
 
             # Fetch in parallel
