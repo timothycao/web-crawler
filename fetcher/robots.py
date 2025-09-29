@@ -1,16 +1,15 @@
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urlparse, urljoin
 
-cache = {}  # domain: robot parser
-
-def is_allowed(url, user_agent='*'):
+def is_allowed(url, cache, user_agent='*'):
     parse_result = urlparse(url)
     base_url = f'{parse_result.scheme}://{parse_result.netloc}'
     robots_url = urljoin(base_url, '/robots.txt')
 
     # Use cached parser if available
     if base_url in cache:
-        return cache[base_url].can_fetch(user_agent, url)
+        rp = cache[base_url]
+        return rp is None or rp.can_fetch(user_agent, url)  # If None, allow everything
     
     rp = RobotFileParser()
     rp.set_url(robots_url)
@@ -23,16 +22,18 @@ def is_allowed(url, user_agent='*'):
     except Exception as e:
         # Print warning, but still allow crawl
         print(f'[WARNING] Failed to fetch {robots_url}: {e}')
+        cache[base_url] = None
         return True
 
-async def is_allowed_async(url, session, user_agent='*'):
+async def is_allowed_async(url, cache, session, user_agent='*'):
     parse_result = urlparse(url)
     base_url = f'{parse_result.scheme}://{parse_result.netloc}'
     robots_url = urljoin(base_url, '/robots.txt')
 
     # Use cached parser if available
     if base_url in cache:
-        return cache[base_url].can_fetch(user_agent, url)
+        rp = cache[base_url]
+        return rp is None or rp.can_fetch(user_agent, url)  # If None, allow everything
 
     rp = RobotFileParser()
 
@@ -47,4 +48,5 @@ async def is_allowed_async(url, session, user_agent='*'):
     except Exception as e:
         # Print warning, but still allow crawl
         print(f'[WARNING] Failed to fetch {robots_url}: {e}')
+        cache[base_url] = None
         return True

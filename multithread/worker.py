@@ -57,7 +57,7 @@ def crawl_page(item, state, log):
             continue
 
         # Check robots.txt permission
-        if not is_allowed(link):
+        if not is_allowed(link, state['robots_cache']):
             state['disallowed'].add(link)
             print('Skipping', link)
             continue

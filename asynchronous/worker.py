@@ -57,7 +57,7 @@ async def crawl_page(item, state, log, session):
             continue
 
         # Check robots.txt permission
-        if not await is_allowed_async(link, session):
+        if not await is_allowed_async(link, state['robots_cache'], session):
             state['disallowed'].add(link)
             print('Skipping', link)
             continue

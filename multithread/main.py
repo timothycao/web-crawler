@@ -23,6 +23,7 @@ def main():
     scheduled = set()       # URLs scheduled to be visited (in heap)
     visited = set()         # URLs that were fetched
     disallowed = set()      # URLs blocked by robots.txt
+    robots_cache = {}       # Stores robot parser per domain
     timeout_counts = {}     # Count timeout-related fetch failures per domain
     
     # Seed initial crawl queue
@@ -39,7 +40,7 @@ def main():
             continue
         
         # Check robots.txt permission
-        if not is_allowed(seed):
+        if not is_allowed(seed, robots_cache):
             disallowed.add(seed)
             print('Skipping', seed)
             continue
@@ -66,6 +67,7 @@ def main():
                 'visited': visited,
                 'scheduled': scheduled,
                 'disallowed': disallowed,
+                'robots_cache': robots_cache,
                 'timeout_counts': timeout_counts,
                 'status_counts': status_counts,
                 'crawl_counts': crawl_counts,
