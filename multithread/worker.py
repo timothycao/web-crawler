@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 from fetcher.page import fetch_page
 from fetcher.robots import is_allowed
 from parser.html import extract_links
-from utils.url import clean_url, validate_url
+from utils.url import clean_url, is_valid_url, is_cgi_url, is_blocked_extension
 from utils.priority import compute_priority
 from logger.log import log_url
 from config import DEBUG
@@ -52,8 +52,8 @@ def crawl_page(item, state, log):
         link = clean_url(link)
         link_domain = urlsplit(link).netloc # Extract domain
         
-        # Skip if invalid URL (not http/https)
-        if not validate_url(link):
+        # Skip if invalid (bad scheme, CGI path, or blocked extension)
+        if not is_valid_url(link) or is_cgi_url(link) or is_blocked_extension(link):
             if DEBUG:
                 print('Skipping', link)
                 with state['skipped_invalid_lock']:

@@ -5,7 +5,7 @@ from aiohttp import ClientSession
 
 from query.ddg import query_ddg
 from fetcher.robots import is_allowed
-from utils.url import clean_url, validate_url
+from utils.url import clean_url, is_valid_url, is_cgi_url, is_blocked_extension
 from logger.log import log_summary
 from asynchronous.worker import crawl_pages
 from config import QUERY, MAX_PAGES, MAX_TIMEOUTS, MAX_CONCURRENT_REQUESTS, DEBUG
@@ -48,7 +48,9 @@ async def main():
         if (
             seed in shared_state['scheduled']       # Already in heap
             or seed in shared_state['disallowed']   # Blocked by robots.txt
-            or not validate_url(seed)               # Invalid URL (not http/https)
+            or not is_valid_url(seed)               # Invalid scheme
+            or is_cgi_url(seed)                     # CGI script
+            or is_blocked_extension(seed)           # Blocked extension
         ):
             continue
         
