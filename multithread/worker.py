@@ -13,7 +13,7 @@ def crawl_page(item, state, log):
 
     # Skip if already visited (thread-safe early check)
     with state['visited_lock']:
-        if url in state['visited']: return None
+        if url in state['visited']: return []
         state['visited'].add(url)
     
     # Extract domain from URL
@@ -37,7 +37,7 @@ def crawl_page(item, state, log):
         state['status_counts'][meta['status_code']] = state['status_counts'].get(meta['status_code'], 0) + 1
 
     # Skip link extraction if fetch failed or content missing (or not html)
-    if meta['status_code'] != 200 or not html: return None
+    if meta['status_code'] != 200 or not html: return []
 
     # Increment successful crawl count per domain
     with state['crawl_counts_lock']:
@@ -51,31 +51,53 @@ def crawl_page(item, state, log):
         link = clean_url(link)
         link_domain = urlsplit(link).netloc # Extract domain
         
-        # Skip if already in heap
+        # Skip if invalid URL (not http/https)
+        if not validate_url(link):
+            with state['skipped_invalid_lock']:
+                state['skipped_invalid'] += 1
+            print('Skipping', link)
+            continue
+
+        # Skip if already scheduled (in heap)
         with state['scheduled_lock']:
-            if link in state['scheduled']: continue
+            if link in state['scheduled']:
+                with state['skipped_dupes_lock']:
+                    state['skipped_dupes'] += 1
+                print('Skipping', link)
+                continue
 
         # Skip if already fetched
         with state['visited_lock']:
-            if link in state['visited']: continue
+            if link in state['visited']:
+                with state['skipped_dupes_lock']:
+                    state['skipped_dupes'] += 1
+                print('Skipping', link)
+                continue
 
         # Skip if already in robots block list
         with state['disallowed_lock']:
-            if link in state['disallowed']: continue
-
-        # Skip if invalid URL (not http/https)
-        if not validate_url(link): continue
+            if link in state['disallowed']:
+                with state['skipped_robots_lock']:
+                    state['skipped_robots'] += 1
+                print('Skipping', link)
+                continue
 
         # Skip if domain already exceeded timeout failure limit
         with state['timeout_counts_lock']:
-            if state['timeout_counts'].get(link_domain, 0) >= state['max_timeouts']: continue
+            if state['timeout_counts'].get(link_domain, 0) >= state['max_timeouts']:
+                with state['skipped_timeout_lock']:
+                    state['skipped_timeout'] += 1
+                print('Skipping', link)
+                continue
 
-        # Check robots.txt permission
+        # Skip if blocked by robots.txt
         with state['robots_cache_lock']:
             allowed = is_allowed(link, state['robots_cache'])
         if not allowed:
             with state['disallowed_lock']:
                 state['disallowed'].add(link)
+            with state['skipped_robots_lock']:
+                state['skipped_robots'] += 1
             print('Skipping', link)
             continue
 
@@ -101,8 +123,7 @@ def crawl_pages(batch, shared_state, log, num_threads):
         # Wait for all futures to complete
         for future in as_completed(futures):
             # Add new links from each thread
-            links = future.result()
-            if links: result.extend(links)
+            result.extend(future.result())
     
     # Return all new links
     return result

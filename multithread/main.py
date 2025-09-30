@@ -10,7 +10,7 @@ from logger.log import log_summary
 from multithread.worker import crawl_pages
 
 QUERY = 'dogs and cats'
-MAX_PAGES = 1000
+MAX_PAGES = 100
 MAX_TIMEOUTS = 2 # Max allowed fetch failures per domain (status 0, no content)
 NUM_THREADS = 16
 
@@ -18,15 +18,44 @@ NUM_THREADS = 16
 setdefaulttimeout(5)
 
 def main():
-    # Crawl state initialization
+    shared_state = {
+        # Limits
+        'max_timeouts': MAX_TIMEOUTS,
+        
+        # URL states
+        'scheduled': set(),     # URLs scheduled to be visited (in heap)
+        'visited': set(),       # URLs that were fetched
+        'disallowed': set(),    # URLs blocked by robots.txt
+        'robots_cache': {},     # Stores robot parser per domain
+        'timeout_counts': {},   # Count timeout-related fetch failures per domain
+        
+        # Stats (for log)
+        'total_bytes': 0,       # Total bytes of fetched pages
+        'status_counts': {},    # Count responses per HTTP status code
+        'crawl_counts': {},     # Count pages successfully crawled per domain
+        'skipped_invalid': 0,   # Total invalid URLs skipped
+        'skipped_dupes': 0,     # Total duplicate URLs skipped
+        'skipped_robots': 0,    # Total robots-blocked URLs skipped
+        'skipped_timeout': 0,   # Total URLs skipped due to timeout failures
+
+        # Locks
+        'scheduled_lock': Lock(),
+        'visited_lock': Lock(),
+        'disallowed_lock': Lock(),
+        'robots_cache_lock': Lock(),
+        'timeout_counts_lock': Lock(),
+        'total_bytes_lock': Lock(),
+        'status_counts_lock': Lock(),
+        'crawl_counts_lock': Lock(),
+        'skipped_invalid_lock': Lock(),
+        'skipped_dupes_lock': Lock(),
+        'skipped_robots_lock': Lock(),
+        'skipped_timeout_lock': Lock(),
+    }
+
     seeds = query_ddg(QUERY, max_results=10)
-    max_heap = []                                       # Simulated max-heap using -priority
-    scheduled, scheduled_lock = set(), Lock()           # URLs scheduled to be visited (in heap)
-    visited, visited_lock = set(), Lock()               # URLs that were fetched
-    disallowed, disallowed_lock = set(), Lock()         # URLs blocked by robots.txt
-    robots_cache, robots_cache_lock = {}, Lock()        # Stores robot parser per domain
-    timeout_counts, timeout_counts_lock = {}, Lock()    # Count timeout-related fetch failures per domain
-    
+    max_heap = [] # Simulated max-heap using -priority
+
     # Seed initial crawl queue
     for seed in seeds:
         # Normalize URL: strip query, fragment, and trailing slash
@@ -34,71 +63,42 @@ def main():
 
         # Skip if already handled or invalid
         if (
-            seed in scheduled           # Already in heap
-            or seed in disallowed       # Blocked by robots.txt
-            or not validate_url(seed)   # Invalid URL (not http/https)
+            seed in shared_state['scheduled']       # Already in heap
+            or seed in shared_state['disallowed']   # Blocked by robots.txt
+            or not validate_url(seed)               # Invalid URL (not http/https)
         ):
             continue
         
         # Check robots.txt permission
-        if not is_allowed(seed, robots_cache):
-            disallowed.add(seed)
+        if not is_allowed(seed, shared_state['robots_cache']):
+            shared_state['disallowed'].add(seed)
             print('Skipping', seed)
             continue
         
         heappush(max_heap, (0, seed, 0)) # (-priority, url, depth)
-        scheduled.add(seed)
-    
-    # Crawl statistics
-    total_bytes, total_bytes_lock = 0, Lock()       # Total bytes of fetched pages
-    status_counts, status_counts_lock = {}, Lock()  # Count responses per HTTP status code
-    crawl_counts, crawl_counts_lock = {}, Lock()    # Count pages successfully crawled per domain
+        shared_state['scheduled'].add(seed)
+
     start_time = time()
+    log = open('log.txt', 'w')
 
-    with open('log.txt', 'w') as log:
-        # Crawl loop using max heap (priority-based BFS)
-        while max_heap and len(visited) < MAX_PAGES:
-            # Prepare batch of next URLs to fetch
-            batch = []
-            while max_heap and len(batch) < NUM_THREADS and len(visited) + len(batch) < MAX_PAGES:
-                batch.append(heappop(max_heap))
+    # Crawl loop using max heap (priority-based BFS)
+    while max_heap and len(shared_state['visited']) < MAX_PAGES:
+        # Prepare batch of next URLs to fetch
+        batch = []
+        while max_heap and len(batch) < NUM_THREADS and len(shared_state['visited']) + len(batch) < MAX_PAGES:
+            batch.append(heappop(max_heap))
 
-            # Shared mutable state across threads
-            shared_state = {
-                'visited': visited,
-                'scheduled': scheduled,
-                'disallowed': disallowed,
-                'robots_cache': robots_cache,
-                'timeout_counts': timeout_counts,
-                'status_counts': status_counts,
-                'crawl_counts': crawl_counts,
-                'total_bytes': total_bytes,
-                'max_timeouts': MAX_TIMEOUTS,
+        # Fetch in parallel
+        links = crawl_pages(batch, shared_state, log, NUM_THREADS)
 
-                # locks
-                'scheduled_lock': scheduled_lock,
-                'visited_lock': visited_lock,
-                'disallowed_lock': disallowed_lock,
-                'robots_cache_lock': robots_cache_lock,
-                'timeout_counts_lock': timeout_counts_lock,
-                'status_counts_lock': status_counts_lock,
-                'crawl_counts_lock': crawl_counts_lock,
-                'total_bytes_lock': total_bytes_lock,
-            }
+        # Enqueue new links
+        for link in links:
+            heappush(max_heap, link)
 
-            # Fetch in parallel
-            links = crawl_pages(batch, shared_state, log, NUM_THREADS)
-
-            # Update stats (batch modifies shared_state directly, but we sync total_bytes here)
-            total_bytes = shared_state['total_bytes']
-
-            # Enqueue new links
-            for link in links:
-                heappush(max_heap, link)
-
-        # Log crawl summary
-        total_time = time() - start_time
-        log_summary(log, len(visited), total_bytes, total_time, status_counts, crawl_counts)
+    # Log crawl summary
+    total_time = time() - start_time
+    log_summary(log, shared_state, total_time)
+    log.close()
 
 if __name__ == '__main__':
     main()

@@ -46,19 +46,40 @@ async def crawl_page(item, state, log, session):
         link = clean_url(link)
         link_domain = urlsplit(link).netloc # Extract domain
 
-        # Skip if already handled or invalid
-        if (
-            link in state['scheduled']      # Already in heap
-            or link in state['visited']     # Already fetched
-            or link in state['disallowed']  # Blocked by robots.txt
-            or not validate_url(link)       # Invalid URL (not http/https)
-            or state['timeout_counts'].get(link_domain, 0) >= state['max_timeouts'] # Domain exceeded failure limit
-        ):
+        # Skip if invalid URL (not http/https)
+        if not validate_url(link):
+            state['skipped_invalid'] += 1
+            print('Skipping', link)
+            continue
+        
+        # Skip if already scheduled (in heap)
+        if link in state['scheduled']:
+            state['skipped_dupes'] += 1
+            print('Skipping', link)
             continue
 
-        # Check robots.txt permission
+        # Skip if already fetched
+        if link in state['visited']:
+            state['skipped_dupes'] += 1
+            print('Skipping', link)
+            continue
+
+        # Skip if already in robots block list
+        if link in state['disallowed']:
+            state['skipped_robots'] += 1
+            print('Skipping', link)
+            continue
+
+        # Skip if domain already exceeded timeout failure limit
+        if state['timeout_counts'].get(link_domain, 0) >= state['max_timeouts']:
+            state['skipped_timeout'] += 1
+            print('Skipping', link)
+            continue
+
+        # Skip if blocked by robots.txt
         if not await is_allowed_async(link, state['robots_cache'], session):
             state['disallowed'].add(link)
+            state['skipped_robots'] += 1
             print('Skipping', link)
             continue
 

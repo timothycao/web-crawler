@@ -3,16 +3,32 @@ def log_url(log_file, url, meta, depth, priority):
     log_file.write(line)
     log_file.flush() # immediately write to disk
 
-def log_summary(log_file, num_pages, total_size, total_time, status_counts, crawl_counts):
-    log_file.write("\nFetch Summary:\n")
-    log_file.write(f'Total pages: {num_pages}\n')
-    log_file.write(f'Total size: {total_size} bytes\n')
+def log_summary(log_file, state, total_time):
+    total_pages = len(state['visited'])
+    total_bytes = state['total_bytes']
+    status_counts = state['status_counts']
+    crawl_counts = state['crawl_counts']
+
+    skipped_invalid = state['skipped_invalid']
+    skipped_dupes = state['skipped_dupes']
+    skipped_robots = state['skipped_robots']
+    skipped_timeout = state['skipped_timeout']
+
+    log_file.write('\nFetch Summary:\n')
+    log_file.write(f'Total pages: {total_pages}\n')
+    log_file.write(f'Total size: {total_bytes} bytes\n')
     log_file.write(f'Total time: {total_time:.2f} seconds\n')
     for status_code, count in status_counts.items():
         log_file.write(f'{status_code} responses: {count}\n')
     
+    log_file.write('\nSkip Summary:\n')
+    log_file.write(f'Invalid URLs: {skipped_invalid}\n')
+    log_file.write(f'Duplicates: {skipped_dupes}\n')
+    log_file.write(f'Blocked by robots.txt: {skipped_robots}\n')
+    log_file.write(f'Timeout failures: {skipped_timeout}\n')
+    
     log_file.write(f'\nTotal pages crawled (status 200 and html): {sum(crawl_counts.values())}\n')
     for domain, count in sorted(crawl_counts.items(), key=lambda x: -x[1]):
-        log_file.write(f"{domain}: {count}\n")   
+        log_file.write(f'{domain}: {count}\n')   
     
     log_file.flush()
