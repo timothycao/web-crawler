@@ -1,6 +1,8 @@
 from requests import post
 from bs4 import BeautifulSoup
 
+from config import DEBUG
+
 DUCKDUCKGO_SEARCH_URL = 'https://html.duckduckgo.com/html/'
 HEADERS = {
     'Accept-Language': 'en-US,en;q=0.9',
@@ -12,11 +14,11 @@ def query_ddg(query: str, max_results: int = 10) -> list[str]:
     results = []
     
     try:
-        print(f'Querying DuckDuckGo: "{query}"')
+        print(f'Querying "{query}"')
         response = post(DUCKDUCKGO_SEARCH_URL, headers=HEADERS, data={'q': query}, timeout=5)
         response.raise_for_status() # Raise if 4xx/5xx error
     except Exception as e:
-        print(f'[ERROR] Failed to fetch search results: {e}')
+        if DEBUG: print(f'[ERROR] Failed to fetch search results: {e}')
         return results
 
     # Parse raw HTML into searchable DOM

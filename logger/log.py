@@ -1,3 +1,5 @@
+from config import DEBUG
+
 def log_url(log_file, url, meta, depth, priority):
     line = f'{url}\t{meta["timestamp"]}\t{meta["content_length"]}\t{depth}\t{meta["status_code"]}\t{priority:.6f}\n'
     log_file.write(line)
@@ -9,11 +11,6 @@ def log_summary(log_file, state, total_time):
     status_counts = state['status_counts']
     crawl_counts = state['crawl_counts']
 
-    skipped_invalid = state['skipped_invalid']
-    skipped_dupes = state['skipped_dupes']
-    skipped_robots = state['skipped_robots']
-    skipped_timeout = state['skipped_timeout']
-
     log_file.write('\nFetch Summary:\n')
     log_file.write(f'Total pages: {total_pages}\n')
     log_file.write(f'Total size: {total_bytes} bytes\n')
@@ -21,11 +18,17 @@ def log_summary(log_file, state, total_time):
     for status_code, count in status_counts.items():
         log_file.write(f'{status_code} responses: {count}\n')
     
-    log_file.write('\nSkip Summary:\n')
-    log_file.write(f'Invalid URLs: {skipped_invalid}\n')
-    log_file.write(f'Duplicates: {skipped_dupes}\n')
-    log_file.write(f'Blocked by robots.txt: {skipped_robots}\n')
-    log_file.write(f'Timeout failures: {skipped_timeout}\n')
+    if DEBUG:
+        skipped_invalid = state['skipped_invalid']
+        skipped_dupes = state['skipped_dupes']
+        skipped_robots = state['skipped_robots']
+        skipped_timeout = state['skipped_timeout']
+
+        log_file.write('\nSkip Summary:\n')
+        log_file.write(f'Invalid URLs: {skipped_invalid}\n')
+        log_file.write(f'Duplicates: {skipped_dupes}\n')
+        log_file.write(f'Blocked by robots.txt: {skipped_robots}\n')
+        log_file.write(f'Timeout failures: {skipped_timeout}\n')
     
     log_file.write(f'\nTotal pages crawled (status 200 and html): {sum(crawl_counts.values())}\n')
     for domain, count in sorted(crawl_counts.items(), key=lambda x: -x[1]):

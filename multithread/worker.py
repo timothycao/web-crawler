@@ -7,6 +7,7 @@ from parser.html import extract_links
 from utils.url import clean_url, validate_url
 from utils.priority import compute_priority
 from logger.log import log_url
+from config import DEBUG
 
 def crawl_page(item, state, log):
     priority, url, depth = item
@@ -53,41 +54,46 @@ def crawl_page(item, state, log):
         
         # Skip if invalid URL (not http/https)
         if not validate_url(link):
-            with state['skipped_invalid_lock']:
-                state['skipped_invalid'] += 1
-            print('Skipping', link)
+            if DEBUG:
+                print('Skipping', link)
+                with state['skipped_invalid_lock']:
+                    state['skipped_invalid'] += 1
             continue
 
         # Skip if already scheduled (in heap)
         with state['scheduled_lock']:
             if link in state['scheduled']:
-                with state['skipped_dupes_lock']:
-                    state['skipped_dupes'] += 1
-                print('Skipping', link)
+                if DEBUG:
+                    print('Skipping', link)
+                    with state['skipped_dupes_lock']:
+                        state['skipped_dupes'] += 1
                 continue
 
         # Skip if already fetched
         with state['visited_lock']:
             if link in state['visited']:
-                with state['skipped_dupes_lock']:
-                    state['skipped_dupes'] += 1
-                print('Skipping', link)
+                if DEBUG:
+                    print('Skipping', link)
+                    with state['skipped_dupes_lock']:
+                        state['skipped_dupes'] += 1
                 continue
 
         # Skip if already in robots block list
         with state['disallowed_lock']:
             if link in state['disallowed']:
-                with state['skipped_robots_lock']:
-                    state['skipped_robots'] += 1
-                print('Skipping', link)
+                if DEBUG:
+                    print('Skipping', link)
+                    with state['skipped_robots_lock']:
+                        state['skipped_robots'] += 1
                 continue
 
         # Skip if domain already exceeded timeout failure limit
         with state['timeout_counts_lock']:
             if state['timeout_counts'].get(link_domain, 0) >= state['max_timeouts']:
-                with state['skipped_timeout_lock']:
-                    state['skipped_timeout'] += 1
-                print('Skipping', link)
+                if DEBUG:
+                    print('Skipping', link)
+                    with state['skipped_timeout_lock']:
+                        state['skipped_timeout'] += 1
                 continue
 
         # Skip if blocked by robots.txt
@@ -96,9 +102,10 @@ def crawl_page(item, state, log):
         if not allowed:
             with state['disallowed_lock']:
                 state['disallowed'].add(link)
-            with state['skipped_robots_lock']:
-                state['skipped_robots'] += 1
-            print('Skipping', link)
+            if DEBUG:
+                print('Skipping', link)
+                with state['skipped_robots_lock']:
+                    state['skipped_robots'] += 1
             continue
 
         # Compute priority and enqueue

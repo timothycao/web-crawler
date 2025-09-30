@@ -1,6 +1,8 @@
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urlparse, urljoin
 
+from config import DEBUG
+
 def is_allowed(url, cache, user_agent='*'):
     parse_result = urlparse(url)
     base_url = f'{parse_result.scheme}://{parse_result.netloc}'
@@ -21,7 +23,7 @@ def is_allowed(url, cache, user_agent='*'):
     
     except Exception as e:
         # Print warning, but still allow crawl
-        print(f'[WARNING] Failed to fetch {robots_url}: {e}')
+        if DEBUG: print(f'[WARNING] Failed to fetch {robots_url}: {e}')
         cache[base_url] = None
         return True
 
@@ -47,6 +49,6 @@ async def is_allowed_async(url, cache, session, user_agent='*'):
 
     except Exception as e:
         # Print warning, but still allow crawl
-        print(f'[WARNING] Failed to fetch {robots_url}: {e}')
+        if DEBUG: print(f'[WARNING] Failed to fetch {robots_url}: {e}')
         cache[base_url] = None
         return True

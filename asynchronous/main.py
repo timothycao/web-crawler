@@ -8,11 +8,7 @@ from fetcher.robots import is_allowed
 from utils.url import clean_url, validate_url
 from logger.log import log_summary
 from asynchronous.worker import crawl_pages
-
-QUERY = 'dogs and cats'
-MAX_PAGES = 100
-MAX_TIMEOUTS = 2 # Max allowed fetch failures per domain (status 0, no content)
-MAX_CONCURRENT_REQUESTS = 16
+from config import QUERY, MAX_PAGES, MAX_TIMEOUTS, MAX_CONCURRENT_REQUESTS, DEBUG
 
 async def main():
     shared_state = {
@@ -30,11 +26,15 @@ async def main():
         'total_bytes': 0,       # Total bytes of fetched pages
         'status_counts': {},    # Count responses per HTTP status code
         'crawl_counts': {},     # Count pages successfully crawled per domain
-        'skipped_invalid': 0,   # Total invalid URLs skipped
-        'skipped_dupes': 0,     # Total duplicate URLs skipped
-        'skipped_robots': 0,    # Total robots-blocked URLs skipped
-        'skipped_timeout': 0,   # Total URLs skipped due to timeout failures
     }
+
+    if DEBUG:
+        shared_state.update({
+            'skipped_invalid': 0,   # Total invalid URLs skipped
+            'skipped_dupes': 0,     # Total duplicate URLs skipped
+            'skipped_robots': 0,    # Total robots-blocked URLs skipped
+            'skipped_timeout': 0,   # Total URLs skipped due to timeout failures
+        })
     
     seeds = query_ddg(QUERY, max_results=10)
     max_heap = [] # Simulated max-heap using -priority
@@ -55,7 +55,7 @@ async def main():
         # Check robots.txt permission
         if not is_allowed(seed, shared_state['robots_cache']):
             shared_state['disallowed'].add(seed)
-            print('Skipping', seed)
+            if DEBUG: print('Skipping', seed)
             continue
         
         heappush(max_heap, (0, seed, 0)) # (-priority, url, depth)
