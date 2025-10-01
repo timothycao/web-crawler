@@ -9,7 +9,7 @@ from fetcher.robots import is_allowed
 from utils.url import clean_url, is_valid_url, is_cgi_url, is_blocked_extension
 from logger.log import log_summary
 from multithread.worker import crawl_with_workers
-from config import QUERY, MAX_PAGES, MAX_TIMEOUTS, NUM_THREADS, DEBUG
+from config import QUERY, MAX_PAGES, MAX_TIME, MAX_TIMEOUTS, NUM_THREADS, DEBUG
 
 # Set timeout for all socket operations (e.g. urlopen, RobotFileParser.read)
 setdefaulttimeout(5)
@@ -31,6 +31,9 @@ def main():
         'status_counts': {},                        # Count responses per HTTP status code
         'domain_crawl_counts': {},                  # Count pages successfully crawled per domain
         'superdomain_domains': defaultdict(set),    # Track unique domains under each superdomain
+
+        # Exit flag
+        'exit': False,  # Global exit flag for workers
 
         # Locks
         # 'scheduled_lock': Lock(),
@@ -89,7 +92,7 @@ def main():
     log = open('log.txt', 'w')
 
     # Launch worker thread pool
-    crawl_with_workers(max_heap, state, log, NUM_THREADS, MAX_PAGES)
+    crawl_with_workers(max_heap, state, log, NUM_THREADS, MAX_PAGES, MAX_TIME, start_time)
 
     # Log crawl summary
     total_time = time() - start_time
