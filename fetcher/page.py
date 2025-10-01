@@ -39,23 +39,24 @@ def fetch_page(url):
         print('Fetching', url)
         request = Request(url, headers=HEADERS)
         response = urlopen(request)
+        final_url = response.geturl() # resolved URL after any redirects
     
     # Handle HTTP response errors (e.g. 404, 403, 500)
     except HTTPError as e:
         meta['status_code'] = e.code
         meta['timestamp'] = datetime.now(timezone.utc).isoformat()
         if DEBUG: print(f'[ERROR] Failed to fetch {url}: {e}')
-        return None, meta
+        return url, None, meta
 
     # Handle network-level errors (e.g. DNS failure, connection timeout)
     except URLError as e:
         if DEBUG: print(f'[ERROR] Failed to fetch {url}: {e}')
-        return None, meta
+        return url, None, meta
     
     # Handle unexpected errors
     except Exception as e:
         if DEBUG: print(f'[ERROR] Failed to fetch {url}: {e}')
-        return None, meta
+        return url, None, meta
         
     # Update metadata after successful fetch
     meta['status_code'] = response.getcode() or 0
@@ -65,7 +66,7 @@ def fetch_page(url):
     content_type = response.headers.get('Content-Type', '')
     if 'text/html' not in content_type:
         if DEBUG: print('Skipping non-html content')
-        return None, meta
+        return final_url, None, meta
     
     # Read raw response
     raw_bytes = response.read()
@@ -83,10 +84,10 @@ def fetch_page(url):
         html = raw_bytes.decode(encoding, errors='replace')
     except Exception as e:
         if DEBUG: print(f'[ERROR] Failed to decode {url} using {encoding}: {e}')
-        return None, meta
+        return final_url, None, meta
     
     meta['content_length'] = len(raw_bytes)
-    return html, meta
+    return final_url, html, meta
 
 async def fetch_page_async(url, session):
     meta = {
@@ -98,6 +99,8 @@ async def fetch_page_async(url, session):
     try:
         print('Fetching', url)
         async with session.get(url, headers=HEADERS, timeout=5) as response:
+            final_url = str(response.url) # resolved URL after any redirects
+            
             # Update metadata after successful fetch
             meta['status_code'] = response.status
             meta['timestamp'] = datetime.now(timezone.utc).isoformat()
@@ -106,7 +109,7 @@ async def fetch_page_async(url, session):
             content_type = response.headers.get('Content-Type', '')
             if 'text/html' not in content_type:
                 if DEBUG: print('Skipping non-html content')
-                return None, meta
+                return final_url, None, meta
 
             # Read raw response
             raw_bytes = await response.read()
@@ -120,24 +123,24 @@ async def fetch_page_async(url, session):
                 html = raw_bytes.decode(encoding, errors='replace')
             except Exception as e:
                 if DEBUG: print(f'[ERROR] Failed to decode {url} using {encoding}: {e}')
-                return None, meta
+                return final_url, None, meta
             
             meta['content_length'] = len(raw_bytes)
-            return html, meta
+            return final_url, html, meta
 
     # Handle HTTP response errors (e.g. 404, 403, 500)
     except ClientResponseError as e:
         meta['status_code'] = e.status
         meta['timestamp'] = datetime.now(timezone.utc).isoformat()
         if DEBUG: print(f'[ERROR] Failed to fetch {url}: {e}')
-        return None, meta
+        return url, None, meta
 
     # Handle network-level errors (e.g. DNS failure, connection timeout)
     except ClientConnectorError as e:
         if DEBUG: print(f'[ERROR] Failed to fetch {url}: {e}')
-        return None, meta
+        return url, None, meta
     
     # Handle unexpected errors
     except Exception as e:
         if DEBUG: print(f'[ERROR] Failed to fetch {url}: {e}')
-        return None, meta
+        return url, None, meta

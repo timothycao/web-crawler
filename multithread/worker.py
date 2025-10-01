@@ -12,16 +12,29 @@ from config import DEBUG
 def crawl_page(item, state, log):
     priority, url, depth = item
 
-    # Skip if already visited (thread-safe early check)
-    with state['visited_lock']:
-        if url in state['visited']: return []
-        state['visited'].add(url)
-    
-    # Extract domain
-    domain = urlsplit(url).netloc
+    # Fetch first to resolve any redirects
+    final_url, html, meta = fetch_page(url)
+    final_url = clean_url(final_url)
 
-    # Fetch and validate page
-    html, meta = fetch_page(url)
+    # Extract domain and superdomain
+    domain = urlsplit(final_url).netloc
+    superdomain = get_superdomain(final_url)
+    
+    # Skip if already in robots block list
+    with state['robots_cache_lock']:
+        allowed = is_allowed(final_url, state['robots_cache'])
+    if not allowed:
+        with state['disallowed_lock']:
+            state['disallowed'].add(final_url)
+        if DEBUG: print('Skipping', final_url)
+        return []
+    
+    # Skip if already visited
+    with state['visited_lock']:
+        if final_url in state['visited']:
+            if DEBUG: print('Skipping', final_url)
+            return []
+        state['visited'].add(final_url)
 
     # Count timeout-related failures (status 0 and no content)
     if meta['status_code'] == 0 and meta['content_length'] == 0:
@@ -29,7 +42,7 @@ def crawl_page(item, state, log):
             state['timeout_counts'][domain] = state['timeout_counts'].get(domain, 0) + 1
 
     # Log result
-    log_url(log, url, meta, depth, -priority)
+    log_url(log, final_url, meta, depth, -priority)
 
     # Update crawl stats
     with state['total_bytes_lock']:
@@ -40,13 +53,17 @@ def crawl_page(item, state, log):
     # Skip link extraction if fetch failed or not html
     if meta['status_code'] != 200 or not html: return []
 
-    # Increment successful crawl count per domain
+    # Increment crawl count per domain
     with state['domain_crawl_counts_lock']:
         state['domain_crawl_counts'][domain] = state['domain_crawl_counts'].get(domain, 0) + 1
+    
+    # Track unique domains per superdomain
+    with state['superdomain_domains_lock']:
+        state['superdomain_domains'][superdomain].add(domain)
 
     # Extract and enqueue child links
     result = []
-    links = extract_links(html, url)
+    links = extract_links(html, final_url)
     for link in links:
         # Normalize URL: strip query, fragment, and trailing slash
         link = clean_url(link)

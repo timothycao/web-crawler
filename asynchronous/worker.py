@@ -12,22 +12,32 @@ from config import DEBUG
 async def crawl_page(item, state, log, session):
     priority, url, depth = item
 
-    # Skip if already visited
-    if url in state['visited']: return []
-    state['visited'].add(url)
+    # Fetch first to resolve any redirects
+    final_url, html, meta = await fetch_page_async(url, session)
+    final_url = clean_url(final_url)
 
-    # Extract domain
+    # Extract domain and superdomain
     domain = urlsplit(url).netloc
+    superdomain = get_superdomain(final_url)
 
-    # Fetch page asynchronously
-    html, meta = await fetch_page_async(url, session)
+    # Skip if already in robots block list
+    if not await is_allowed_async(final_url, state['robots_cache'], session):
+        state['disallowed'].add(final_url)
+        if DEBUG: print('Skipping', final_url)
+        return []
+
+    # Skip if already visited
+    if final_url in state['visited']:
+        if DEBUG: print('Skipping', final_url)
+        return []
+    state['visited'].add(final_url)
 
     # Count timeout-related failures (status 0 and no content)
     if meta['status_code'] == 0 and meta['content_length'] == 0:
         state['timeout_counts'][domain] = state['timeout_counts'].get(domain, 0) + 1
 
     # Log result
-    log_url(log, url, meta, depth, -priority)
+    log_url(log, final_url, meta, depth, -priority)
     
     # Update crawl stats
     state['total_bytes'] += meta['content_length']
@@ -39,9 +49,12 @@ async def crawl_page(item, state, log, session):
     # Increment successful crawl count per domain
     state['domain_crawl_counts'][domain] = state['domain_crawl_counts'].get(domain, 0) + 1
 
+    # Track unique domains per superdomain
+    state['superdomain_domains'][superdomain].add(domain)
+
     # Extract and enqueue child links
     result = []
-    links = extract_links(html, url)
+    links = extract_links(html, final_url)
     for link in links:
         # Normalize URL: strip query, fragment, and trailing slash
         link = clean_url(link)
