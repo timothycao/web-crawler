@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from gzip import GzipFile
 from re import search, IGNORECASE
+from socket import timeout
 
 from aiohttp import ClientResponseError, ClientConnectorError
 from chardet import detect
@@ -40,6 +41,41 @@ def fetch_page(url):
         request = Request(url, headers=HEADERS)
         response = urlopen(request)
         final_url = response.geturl() # resolved URL after any redirects
+
+        # Update metadata after successful fetch
+        meta['status_code'] = response.getcode() or 0
+        meta['timestamp'] = datetime.now(timezone.utc).isoformat()
+
+        # Skip non-HTML content (e.g. image, pdf, etc.)
+        content_type = response.headers.get('Content-Type', '')
+        if 'text/html' not in content_type:
+            if DEBUG: print('Skipping non-html content')
+            return final_url, None, meta
+        
+        # Read raw response
+        try:
+            raw_bytes = response.read()
+        except timeout:
+            if DEBUG: print(f'[TIMEOUT] Reading from {url} took too long')
+            return final_url, None, meta
+        
+        # Decompress if gzipped
+        if response.headers.get('Content-Encoding') == 'gzip':
+            if DEBUG: print('Decompressing gzip content')
+            buffer = BytesIO(raw_bytes)
+            raw_bytes = GzipFile(fileobj=buffer).read() # decompressed
+        
+        # Detect encoding
+        encoding = _detect_encoding(raw_bytes, content_type)
+        try:
+            # Decode to HTML
+            html = raw_bytes.decode(encoding, errors='replace')
+        except Exception as e:
+            if DEBUG: print(f'[ERROR] Failed to decode {url} using {encoding}: {e}')
+            return final_url, None, meta
+        
+        meta['content_length'] = len(raw_bytes)
+        return final_url, html, meta
     
     # Handle HTTP response errors (e.g. 404, 403, 500)
     except HTTPError as e:
@@ -57,37 +93,6 @@ def fetch_page(url):
     except Exception as e:
         if DEBUG: print(f'[ERROR] Failed to fetch {url}: {e}')
         return url, None, meta
-        
-    # Update metadata after successful fetch
-    meta['status_code'] = response.getcode() or 0
-    meta['timestamp'] = datetime.now(timezone.utc).isoformat()
-
-    # Skip non-HTML content (e.g. image, pdf, etc.)
-    content_type = response.headers.get('Content-Type', '')
-    if 'text/html' not in content_type:
-        if DEBUG: print('Skipping non-html content')
-        return final_url, None, meta
-    
-    # Read raw response
-    raw_bytes = response.read()
-    
-    # Decompress if gzipped
-    if response.headers.get('Content-Encoding') == 'gzip':
-        if DEBUG: print('Decompressing gzip content')
-        buffer = BytesIO(raw_bytes)
-        raw_bytes = GzipFile(fileobj=buffer).read() # decompressed
-    
-    # Detect encoding
-    encoding = _detect_encoding(raw_bytes, content_type)
-    try:
-        # Decode to HTML
-        html = raw_bytes.decode(encoding, errors='replace')
-    except Exception as e:
-        if DEBUG: print(f'[ERROR] Failed to decode {url} using {encoding}: {e}')
-        return final_url, None, meta
-    
-    meta['content_length'] = len(raw_bytes)
-    return final_url, html, meta
 
 async def fetch_page_async(url, session):
     meta = {
