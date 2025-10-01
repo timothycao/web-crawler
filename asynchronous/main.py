@@ -1,4 +1,5 @@
 from asyncio import run, get_event_loop
+from collections import defaultdict
 from heapq import heappush, heappop
 
 from aiohttp import ClientSession
@@ -23,9 +24,10 @@ async def main():
         'timeout_counts': {},   # Count timeout-related fetch failures per domain
         
         # Stats (for log)
-        'total_bytes': 0,       # Total bytes of fetched pages
-        'status_counts': {},    # Count responses per HTTP status code
-        'crawl_counts': {},     # Count pages successfully crawled per domain
+        'total_bytes': 0,                           # Total bytes of fetched pages
+        'status_counts': {},                        # Count responses per HTTP status code
+        'domain_crawl_counts': {},                  # Count pages successfully crawled per domain
+        'superdomain_domains': defaultdict(set),    # Track unique domains under each superdomain
     }
 
     if DEBUG:

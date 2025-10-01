@@ -1,6 +1,7 @@
 from os.path import splitext
 from urllib.parse import urlsplit, urlunsplit
 
+import tldextract
 import validators
 
 BLACKLIST = {
@@ -29,8 +30,11 @@ def clean_url(url):
     
     return cleaned
 
+def get_superdomain(url):
+    extracted = tldextract.extract(url)
+    return f'{extracted.domain}.{extracted.suffix}'
+
 def is_valid_url(url):
-    # return url.startswith('http://') or url.startswith('https://')
     return validators.url(url)
 
 def is_cgi_url(url):

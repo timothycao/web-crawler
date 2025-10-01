@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 from fetcher.page import fetch_page
 from fetcher.robots import is_allowed
 from parser.html import extract_links
-from utils.url import clean_url, is_valid_url, is_cgi_url, is_blocked_extension
+from utils.url import clean_url, get_superdomain, is_valid_url, is_cgi_url, is_blocked_extension
 from utils.priority import compute_priority
 from logger.log import log_url
 from config import DEBUG
@@ -17,7 +17,7 @@ def crawl_page(item, state, log):
         if url in state['visited']: return []
         state['visited'].add(url)
     
-    # Extract domain from URL
+    # Extract domain
     domain = urlsplit(url).netloc
 
     # Fetch and validate page
@@ -37,12 +37,12 @@ def crawl_page(item, state, log):
     with state['status_counts_lock']:
         state['status_counts'][meta['status_code']] = state['status_counts'].get(meta['status_code'], 0) + 1
 
-    # Skip link extraction if fetch failed or content missing (or not html)
+    # Skip link extraction if fetch failed or not html
     if meta['status_code'] != 200 or not html: return []
 
     # Increment successful crawl count per domain
-    with state['crawl_counts_lock']:
-        state['crawl_counts'][domain] = state['crawl_counts'].get(domain, 0) + 1
+    with state['domain_crawl_counts_lock']:
+        state['domain_crawl_counts'][domain] = state['domain_crawl_counts'].get(domain, 0) + 1
 
     # Extract and enqueue child links
     result = []
@@ -50,7 +50,10 @@ def crawl_page(item, state, log):
     for link in links:
         # Normalize URL: strip query, fragment, and trailing slash
         link = clean_url(link)
-        link_domain = urlsplit(link).netloc # Extract domain
+
+        # Extract domain and superdomain
+        link_domain = urlsplit(link).netloc
+        link_superdomain = get_superdomain(link)
         
         # Skip if invalid (bad scheme, CGI path, or blocked extension)
         if not is_valid_url(link) or is_cgi_url(link) or is_blocked_extension(link):
@@ -108,10 +111,19 @@ def crawl_page(item, state, log):
                     state['skipped_robots'] += 1
             continue
 
-        # Compute priority and enqueue
-        with state['crawl_counts_lock']:
-            domain_count = state['crawl_counts'].get(link_domain, 0)
-        priority = compute_priority(domain_count)
+        # Get the domain's current crawl count
+        with state['domain_crawl_counts_lock']:
+            domain_crawl_count = state['domain_crawl_counts'].get(link_domain, 0)
+
+        # Add domain to its superdomain set and get unique count
+        with state['superdomain_domains_lock']:
+            state['superdomain_domains'][link_superdomain].add(link_domain)
+            superdomain_domain_count = len(state['superdomain_domains'][link_superdomain])
+
+        # Compute priority
+        priority = compute_priority(domain_crawl_count, superdomain_domain_count)
+        
+        # Enqueue
         with state['scheduled_lock']:
             state['scheduled'].add(link)
         result.append((-priority, link, depth + 1))

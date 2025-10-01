@@ -1,4 +1,5 @@
 from time import time
+from collections import defaultdict
 from heapq import heappush, heappop
 from socket import setdefaulttimeout
 from threading import Lock
@@ -26,9 +27,10 @@ def main():
         'timeout_counts': {},   # Count timeout-related fetch failures per domain
         
         # Stats (for log)
-        'total_bytes': 0,       # Total bytes of fetched pages
-        'status_counts': {},    # Count responses per HTTP status code
-        'crawl_counts': {},     # Count pages successfully crawled per domain
+        'total_bytes': 0,                           # Total bytes of fetched pages
+        'status_counts': {},                        # Count responses per HTTP status code
+        'domain_crawl_counts': {},                  # Count pages successfully crawled per domain
+        'superdomain_domains': defaultdict(set),    # Track unique domains under each superdomain
 
         # Locks
         'scheduled_lock': Lock(),
@@ -38,7 +40,8 @@ def main():
         'timeout_counts_lock': Lock(),
         'total_bytes_lock': Lock(),
         'status_counts_lock': Lock(),
-        'crawl_counts_lock': Lock(),
+        'domain_crawl_counts_lock': Lock(),
+        'superdomain_domains_lock': Lock(),
     }
 
     if DEBUG:

@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 from fetcher.page import fetch_page_async
 from fetcher.robots import is_allowed_async
 from parser.html import extract_links
-from utils.url import clean_url, is_valid_url, is_cgi_url, is_blocked_extension
+from utils.url import clean_url, get_superdomain, is_valid_url, is_cgi_url, is_blocked_extension
 from utils.priority import compute_priority
 from logger.log import log_url
 from config import DEBUG
@@ -16,7 +16,7 @@ async def crawl_page(item, state, log, session):
     if url in state['visited']: return []
     state['visited'].add(url)
 
-    # Extract domain from URL
+    # Extract domain
     domain = urlsplit(url).netloc
 
     # Fetch page asynchronously
@@ -37,7 +37,7 @@ async def crawl_page(item, state, log, session):
     if meta['status_code'] != 200 or not html: return []
 
     # Increment successful crawl count per domain
-    state['crawl_counts'][domain] = state['crawl_counts'].get(domain, 0) + 1
+    state['domain_crawl_counts'][domain] = state['domain_crawl_counts'].get(domain, 0) + 1
 
     # Extract and enqueue child links
     result = []
@@ -45,7 +45,10 @@ async def crawl_page(item, state, log, session):
     for link in links:
         # Normalize URL: strip query, fragment, and trailing slash
         link = clean_url(link)
-        link_domain = urlsplit(link).netloc # Extract domain
+
+        # Extract domain and superdomain
+        link_domain = urlsplit(link).netloc
+        link_superdomain = get_superdomain(link)
 
         # Skip if invalid (bad scheme, CGI path, or blocked extension)
         if not is_valid_url(link) or is_cgi_url(link) or is_blocked_extension(link):
@@ -90,10 +93,19 @@ async def crawl_page(item, state, log, session):
                 state['skipped_robots'] += 1
             continue
 
-        # Compute priority and enqueue
-        priority = compute_priority(state['crawl_counts'].get(link_domain, 0))
-        result.append((-priority, link, depth + 1))
+        # Get the domain's current crawl count
+        domain_crawl_count = state['domain_crawl_counts'].get(link_domain, 0)
+        
+        # Add domain to its superdomain set and get unique count
+        state['superdomain_domains'][link_superdomain].add(link_domain)
+        superdomain_domain_count = len(state['superdomain_domains'][link_superdomain])
+        
+        # Compute priority
+        priority = compute_priority(domain_crawl_count, superdomain_domain_count)
+        
+        # Enqueue
         state['scheduled'].add(link)
+        result.append((-priority, link, depth + 1))
 
     # Return new links
     return result
