@@ -1,11 +1,11 @@
 # Seed query
-QUERY = 'dogs and cats'
+QUERY = 'brooklyn pizza'
 
 # Max number of pages to visit (fetch)
-MAX_PAGES = 1000
+MAX_PAGES = 100
 
 # Max crawl time in seconds
-MAX_TIME = 60
+MAX_TIME = 1800
 
 # Max allowed fetch failures per domain (status 0, no content)
 MAX_TIMEOUTS = 2

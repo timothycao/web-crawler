@@ -1,0 +1,59 @@
+This project implements a multithreaded web crawler that visits up to a specified number of pages or until a time limit
+is reached, starting from seed URLs obtained via DuckDuckGo search. The crawler uses a breadth-first search (BFS) strategy
+with priority-based queueing to maximize domain diversity, while filtering out duplicates, invalid links, CGI scripts,
+links with blocked file extensions, and links disallowed by robots.txt. A separate asynchronous version is also included
+for comparison (briefly described below).
+
+The main thread manages a priority queue (max-heap) and uses a fixed-size thread pool (ThreadPoolExecutor) to fetch and
+process pages concurrently. Each thread:
+- Fetches the page (including resolving final redirect URL)
+- Validates the response and logs the result (timestamp, size, depth, status, priority score)
+- Extracts and filters outgoing links
+- Updates crawl statistics (e.g. per-domain crawl counts)
+
+New links are normalized, checked against robots.txt, and only added to the queue if they haven’t already been visited or
+scheduled. Each domain’s fetch failure count is tracked, and further fetches are skipped after a configurable threshold to
+reduce delay. Crawl priority is computed based on how many pages have already been fetched from the domain and how many
+distinct domains exist under the same superdomain, promoting coverage across multiple domains.
+
+The crawler exits early once the configured page or time limit is reached. Shared state (e.g., visited/scheduled URLs,
+robots cache) is stored in shared structures. Locks were originally added to protect shared access, but were later removed
+to boost performance, since race conditions were not observed during I/O-heavy execution.
+
+The asynchronous version uses the same priority-based BFS logic but replaces threads with asyncio coroutines and aiohttp
+for concurrent fetches. While more memory-efficient, the async version was slower in practice for this workload and is
+included for comparison.
+
+External Resources Used:
+- DuckDuckGo seed URLs obtained via POST-based HTML scraping
+- Python documentation for:
+    - concurrent.futures.ThreadPoolExecutor
+    - asyncio, aiohttp
+    - urllib.robotparser and urllib.parse
+
+Optional Enhancements:
+- Domain diversity scoring via superdomain grouping
+- Early exits based on configured max page and time (MAX_PAGE, MAX_TIME)
+- Debug mode (DEBUG=True) with URL skip statistics and live printing (including errors and warnings)
+- Two concurrency models (multithreaded and asynchronous) for comparison
+
+Limitations:
+- JavaScript-generated content and links will not be discovered, as this is a non-headless crawler.
+- Some worker threads may stall briefly near the end of a crawl while waiting for exit conditions (example below).
+
+Example (from `crawl_log1.txt`):
+
+Console prints:
+[EXIT] Reached limit — fetched 10000 pages in 872.59 seconds
+[EXIT] Reached limit — fetched 10000 pages in 872.63 seconds
+...
+[EXIT] Reached limit — fetched 10018 pages in 946.58 seconds
+
+Logged summary:
+Fetch Summary:
+Total pages: 10018
+Total size: 1018798940 bytes
+Total time: 946.58 seconds
+
+Note: While the crawler reached the 10,000-page target around 872 seconds, threads continued finishing up in the background,
+inflating the logged time. Only 7305 of the 7359 status-200 responses were valid HTML pages and counted as crawled.

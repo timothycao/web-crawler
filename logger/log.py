@@ -40,7 +40,7 @@ def log_summary(log_file, state, total_time):
         superdomain_crawl_counts[superdomain] += count
 
     log_file.write(f'\nTotal pages crawled (status 200 and html): {sum(domain_crawl_counts.values())}\n')
-    for superdomain, count in sorted(superdomain_crawl_counts.items(), key=lambda x: -x[1]):
-        log_file.write(f'{superdomain}: {count}\n')
+    # for superdomain, count in sorted(superdomain_crawl_counts.items(), key=lambda x: -x[1]):
+    #     log_file.write(f'{superdomain}: {count}\n')
     
     log_file.flush()
