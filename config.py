@@ -2,7 +2,7 @@
 QUERY = 'brooklyn pizza'
 
 # Max number of pages to visit (fetch)
-MAX_PAGES = 100
+MAX_PAGES = 10000
 
 # Max crawl time in seconds
 MAX_TIME = 1800

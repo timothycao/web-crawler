@@ -15,7 +15,7 @@ The final implementation uses Python's `ThreadPoolExecutor` for concurrency, wit
 
 ```bash
 python3 -m venv .venv
-source venv/bin/activate  # on Windows: venv\Scripts\activate
+source .venv/bin/activate   # on Windows: .venv\Scripts\activate
 ```
 
 ### 2. Install dependencies
